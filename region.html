@@ -34,7 +34,7 @@
   <div class="container">
     <header>
       <h1>🗺️ 지역별 관광정보 조회</h1>
-      <p>지역을 선택하면 관광지와 이미지를 확인하고, 선택한 지역 정보가 Firestore에 저장됩니다.</p>
+      <p>지역을 선택하면 관광지와 이미지를 확인하고, 선택한 지역 정보가 Firestore에 실시간 저장됩니다.</p>
     </header>
 
     <section class="controls">
@@ -61,19 +61,19 @@
   </div>
 
   <script type="module">
-    // 1. Cloud Firestore 전용 v10 SDK Import
+    // Cloud Firestore 전용 최신 SDK (v10)
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     // -------------------------------------------------------------
-    // [설정 값 입력]
+    // [인증키 및 설정 대입]
     // -------------------------------------------------------------
-    const TOUR_API_KEY = "b2d8f3d6a6dd0e285169d5ad17955894fbbc64c9aabbcfb3f97529b7525159b2"; // 공공데이터 Decoding 인증키
+    const TOUR_API_KEY = "b2d8f3d6a6dd0e285169d5ad17955894fbbc64c9aabbcfb3f97529b7525159b2"; // 공공데이터포털 Decoding 인증키
 
     const firebaseConfig = {
       apiKey: "AIzaSyBsQih3KLjaMY-giqttqHDZ0q0V3_D7cRo",
       authDomain: "my-project-ed95b.firebaseapp.com",
-      projectId: "my-project-ed95b",             // Firestore는 databaseURL 대신 projectId 필수!
+      projectId: "my-project-ed95b",             // Firestore 연동 핵심 Key
       storageBucket: "my-project-ed95b.firebasestorage.app",
       messagingSenderId: "573604898279",
       appId: "1:573604898279:web:102f4bede8bebfc7d10942"
@@ -88,7 +88,7 @@
     const loading = document.getElementById("loading");
     const statusInfo = document.getElementById("statusInfo");
 
-    // 1. 초기 웹페이지 로딩 시 Firestore에서 저장된 지역 가져오기
+    // 1. 처음 로딩 시 Firestore에 저장된 선택 정보 확인
     window.addEventListener("DOMContentLoaded", async () => {
       try {
         const docRef = doc(db, "userSelection", "current");
@@ -100,20 +100,20 @@
 
           if (areaCode) {
             areaSelect.value = areaCode;
-            statusInfo.textContent = `이전에 저장된 지역 [${areaName}]의 정보를 Firestore에서 읽어왔습니다.`;
+            statusInfo.textContent = `이전에 선택했던 [${areaName}] 데이터를 Firestore에서 불러왔습니다.`;
             await fetchAndRenderTourData(areaCode, areaName);
           }
         } else {
           tourList.classList.add("hidden");
-          statusInfo.textContent = "저장된 지역 정보가 없습니다. 지역을 선택해 주세요.";
+          statusInfo.textContent = "저장된 지역 정보가 없습니다. 지역을 선택해주세요.";
         }
       } catch (error) {
-        console.error("Firestore 초기 읽기 에러:", error);
+        console.error("Firestore 읽기 오류:", error);
         tourList.classList.add("hidden");
       }
     });
 
-    // 2. 지역 선택 드롭다운 변경 시 실행
+    // 2. 지역 선택 시 이벤트
     areaSelect.addEventListener("change", async (e) => {
       const areaCode = e.target.value;
       const areaName = e.target.options[e.target.selectedIndex].text;
@@ -124,14 +124,14 @@
         return;
       }
 
-      // API 조회 및 화면 표출
+      // API 호출
       await fetchAndRenderTourData(areaCode, areaName);
 
-      // Firestore 저장
+      // Firestore 저장/업데이트
       await saveSelectionToFirestore(areaCode, areaName);
     });
 
-    // 3. 공공데이터 API 호출
+    // 3. 한국관광공사 TourAPI (KorService2/areaBasedList2) 호출
     async function fetchAndRenderTourData(areaCode, areaName) {
       showLoading(true);
       tourList.innerHTML = "";
@@ -154,7 +154,7 @@
         statusInfo.textContent = `현재 지역: ${areaName}`;
         renderTourCards(items);
       } catch (error) {
-        console.error("API 연동 에러:", error);
+        console.error("API 호출 오류:", error);
         statusInfo.textContent = "관광 정보를 불러오는 중 오류가 발생했습니다.";
         tourList.classList.add("hidden");
       } finally {
@@ -162,7 +162,7 @@
       }
     }
 
-    // 4. 목록 뷰 표출
+    // 4. 카드 시각화 목록
     function renderTourCards(items) {
       tourList.innerHTML = "";
       items.forEach((item) => {
@@ -186,17 +186,18 @@
       tourList.classList.remove("hidden");
     }
 
-    // 5. Firestore 데이터 저장/업데이트 함수
+    // 5. Firestore에 저장하는 함수
     async function saveSelectionToFirestore(areaCode, areaName) {
       try {
+        // 'userSelection' 컬렉션의 'current' 문서 생성/덮어쓰기
         await setDoc(doc(db, "userSelection", "current"), {
           areaCode: areaCode,
           areaName: areaName,
           updatedAt: new Date().toISOString()
         });
-        console.log("Firestore 저장 성공:", areaName);
+        console.log("Firestore 저장 성공! 저장된 지역:", areaName);
       } catch (error) {
-        console.error("Firestore 저장 실패 (보안 규칙 또는 설정 오류):", error);
+        console.error("Firestore 저장 실패:", error);
       }
     }
 
