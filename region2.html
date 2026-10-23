@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>대한민국 지역별 관광 탐색기</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800">
+  <div class="max-w-6xl mx-auto px-4 py-8">
+    <!-- 헤더 -->
+    <header class="flex justify-between items-center mb-8 border-b pb-4">
+      <h1 class="text-2xl font-extrabold text-slate-900">🗺️ 지역별 관광정보</h1>
+      <a href="favorites.html" class="bg-rose-500 hover:bg-rose-600 text-white font-semibold px-4 py-2 rounded-lg shadow transition">
+        ❤️ 찜 보관함 보기
+      </a>
+    </header>
+
+    <!-- 지역 선택 드롭다운 -->
+    <section class="max-w-md mx-auto bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6 flex items-center gap-3">
+      <label for="areaSelect" class="font-bold text-slate-700 whitespace-nowrap">지역 선택:</label>
+      <select id="areaSelect" class="w-full bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-lg p-2.5">
+        <option value="">-- 지역을 선택하세요 --</option>
+        <option value="1">서울</option>
+        <option value="2">인천</option>
+        <option value="3">대전</option>
+        <option value="4">대구</option>
+        <option value="5">광주</option>
+        <option value="6">부산</option>
+        <option value="7">울산</option>
+        <option value="8">세종</option>
+        <option value="31">경기도</option>
+        <option value="32">강원특별자치도</option>
+        <option value="39">제주도</option>
+      </select>
+    </section>
+
+    <!-- 안내 메시지 및 로딩 표시 -->
+    <div id="statusInfo" class="text-center text-sm font-medium text-slate-600 mb-4"></div>
+    <div id="loading" class="hidden text-center py-8 font-bold text-blue-600">데이터를 불러오는 중입니다...</div>
+
+    <!-- 관광지 시각화 목록 뷰 (초기 hidden 상태) -->
+    <main id="tourGrid" class="hidden grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"></main>
+  </div>
+
+  <!-- ES Module 적용 -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getFirestore, doc, setDoc, getDoc, deleteDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    // 1. 공공데이터포털 Decoding(디코딩) 인증키 입력
+    const TOUR_API_KEY = "b2d8f3d6a6dd0e285169d5ad17955894fbbc64c9aabbcfb3f97529b7525159b2";
+
+    // 2. Firebase Config (Firestore 접속 시 databaseURL은 필요 없으며, projectId가 핵심입니다)
+    const firebaseConfig = {
+      apiKey: "AIzaSyBsQih3KLjaMY-giqttqHDZ0q0V3_D7cRo",
+      authDomain: "my-project-ed95b.firebaseapp.com",
+      projectId: "my-project-ed95b",
+      storageBucket: "my-project-ed95b.firebasestorage.app",
+      messagingSenderId: "573604898279",
+      appId: "1:573604898279:web:102f4bede8bebfc7d10942"
+    };
+
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const areaSelect = document.getElementById("areaSelect");
+    const tourGrid = document.getElementById("tourGrid");
+    const loading = document.getElementById("loading");
+    const statusInfo = document.getElementById("statusInfo");
+
+    let currentItems = [];
+
+    // 3. 페이지 초기 로드 시 Firestore에 저장된 지역 정보 조회
+    window.addEventListener("DOMContentLoaded", async () => {
+      try {
+        const docRef = doc(db, "userSelection", "current");
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+          const { areaCode, areaName } = docSnap.data();
+          if (areaCode) {
+            areaSelect.value = areaCode;
+            statusInfo.textContent = `Firestore에서 이전 저장 지역 [${areaName}] 정보를 불러왔습니다.`; await fetchAndRenderTourData(areaCode, areaName); } } else { tourGrid.classList.add("hidden"); statusInfo.textContent = "저장된 지역 정보가 없습니다. 지역을 선택해 주세요."; } } catch (err) { console.error("Firestore 읽기 에러:", err); tourGrid.classList.add("hidden"); } });  // 4. 드롭다운 지역 선택 시 API 호출 및 Firestore 저장 areaSelect.addEventListener("change", async (e) => { const areaCode = e.target.value; const areaName = e.target.options[e.target.selectedIndex].text;  if (!areaCode) { tourGrid.classList.add("hidden"); statusInfo.textContent = ""; return; }  await fetchAndRenderTourData(areaCode, areaName);  // 선택한 지역 Firestore에 저장/업데이트 try { await setDoc(doc(db, "userSelection", "current"), { areaCode, areaName, updatedAt: new Date().toISOString() }); } catch (err) { console.error("지역 저장 에러:", err); } });  // 5. 한국관광공사 TourAPI 2.0 (KorService2/areaBasedList2) 호출 (HTTPS 필수) async function fetchAndRenderTourData(areaCode, areaName) { showLoading(true); tourGrid.innerHTML = "";  const url = `https://apis.data.go.kr/B551011/KorService2/areaBasedList2?serviceKey=${encodeURIComponent(TOUR_API_KEY)}&numOfRows=20&pageNo=1&MobileOS=ETC&MobileApp=AppTest&_type=json&arrange=A&areaCode=${areaCode}`;  try { const res = await fetch(url); const data = await res.json(); let items = data.response?.body?.items?.item \vert{}\vert{} [];  if (!Array.isArray(items)) items = [items];  if (items.length === 0) { statusInfo.textContent = `[${areaName}] 지역의 데이터가 없습니다.`;
+          tourGrid.classList.add("hidden");
+          return;
+        }
+
+        currentItems = items;
+        statusInfo.textContent = `현재 지역: ${areaName} (총 ${items.length}건)`;
+        await renderCards();
+      } catch (error) {
+        console.error(error);
+        statusInfo.textContent = "API 연동 중 오류가 발생했습니다.";
+        tourGrid.classList.add("hidden");
+      } finally {
+        showLoading(false);
+      }
+    }
+
+    // 6. 하단 화면 시각화 카드 목록 렌더링 & 찜 상태 토글
+    async function renderCards() {
+      // 현재 Firestore의 찜 목록 전체 불러오기
+      const favSnap = await getDocs(collection(db, "favorites"));
+      const favoritesMap = {};
+      favSnap.forEach((doc) => {
+        favoritesMap[doc.id] = doc.data();
+      });
+
+      tourGrid.innerHTML = "";
+
+      currentItems.forEach((item) => {
+        let imageUrl = item.firstimage || "https://via.placeholder.com/400x260?text=No+Image";
+        if (imageUrl.startsWith("http://")) imageUrl = imageUrl.replace("http://", "https://");
+
+        const contentId = String(item.contentid);
+        const isFav = !!favoritesMap[contentId];
+
+        const card = document.createElement("article");
+        card.className = "bg-white rounded-xl shadow border border-slate-100 overflow-hidden flex flex-col justify-between hover:shadow-md transition";
+        card.innerHTML = `
+          <div class="relative aspect-video bg-slate-200">
+            <img src="${imageUrl}" alt="${item.title}" class="w-full h-44 object-cover" onError="this.src='https://via.placeholder.com/400x260?text=Image+Error'" />
+            <button class="fav-btn absolute top-2 right-2 bg-white/80 p-2 rounded-full shadow hover:scale-110 transition">
+              ${isFav ? "❤️" : "🤍"}
+            </button>
+          </div>
+          <div class="p-4">
+            <h2 class="font-bold text-slate-800 line-clamp-1">${item.title}</h2>
+            <p class="text-xs text-slate-500 mt-1 line-clamp-
