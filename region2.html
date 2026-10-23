@@ -52,7 +52,7 @@
     const TOUR_API_KEY = "b2d8f3d6a6dd0e285169d5ad17955894fbbc64c9aabbcfb3f97529b7525159b2";
 
     // 2. Firebase Config (Firestore 접속 시 databaseURL은 필요 없으며, projectId가 핵심입니다)
-    const firebaseConfig = {
+   const firebaseConfig = {
       apiKey: "AIzaSyBsQih3KLjaMY-giqttqHDZ0q0V3_D7cRo",
       authDomain: "my-project-ed95b.firebaseapp.com",
       projectId: "my-project-ed95b",
@@ -60,7 +60,6 @@
       messagingSenderId: "573604898279",
       appId: "1:573604898279:web:102f4bede8bebfc7d10942"
     };
-
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
@@ -82,7 +81,60 @@
           const { areaCode, areaName } = docSnap.data();
           if (areaCode) {
             areaSelect.value = areaCode;
-            statusInfo.textContent = `Firestore에서 이전 저장 지역 [${areaName}] 정보를 불러왔습니다.`; await fetchAndRenderTourData(areaCode, areaName); } } else { tourGrid.classList.add("hidden"); statusInfo.textContent = "저장된 지역 정보가 없습니다. 지역을 선택해 주세요."; } } catch (err) { console.error("Firestore 읽기 에러:", err); tourGrid.classList.add("hidden"); } });  // 4. 드롭다운 지역 선택 시 API 호출 및 Firestore 저장 areaSelect.addEventListener("change", async (e) => { const areaCode = e.target.value; const areaName = e.target.options[e.target.selectedIndex].text;  if (!areaCode) { tourGrid.classList.add("hidden"); statusInfo.textContent = ""; return; }  await fetchAndRenderTourData(areaCode, areaName);  // 선택한 지역 Firestore에 저장/업데이트 try { await setDoc(doc(db, "userSelection", "current"), { areaCode, areaName, updatedAt: new Date().toISOString() }); } catch (err) { console.error("지역 저장 에러:", err); } });  // 5. 한국관광공사 TourAPI 2.0 (KorService2/areaBasedList2) 호출 (HTTPS 필수) async function fetchAndRenderTourData(areaCode, areaName) { showLoading(true); tourGrid.innerHTML = "";  const url = `https://apis.data.go.kr/B551011/KorService2/areaBasedList2?serviceKey=${encodeURIComponent(TOUR_API_KEY)}&numOfRows=20&pageNo=1&MobileOS=ETC&MobileApp=AppTest&_type=json&arrange=A&areaCode=${areaCode}`;  try { const res = await fetch(url); const data = await res.json(); let items = data.response?.body?.items?.item \vert{}\vert{} [];  if (!Array.isArray(items)) items = [items];  if (items.length === 0) { statusInfo.textContent = `[${areaName}] 지역의 데이터가 없습니다.`;
+            statusInfo.textContent = `Firestore에서 이전 저장 지역 [${areaName}] 정보를 불러왔습니다.`;
+            await fetchAndRenderTourData(areaCode, areaName);
+          }
+        } else {
+          tourGrid.classList.add("hidden");
+          statusInfo.textContent = "저장된 지역 정보가 없습니다. 지역을 선택해 주세요.";
+        }
+      } catch (err) {
+        console.error("Firestore 읽기 에러:", err);
+        tourGrid.classList.add("hidden");
+      }
+    });
+
+    // 4. 드롭다운 지역 선택 시 API 호출 및 Firestore 저장
+    areaSelect.addEventListener("change", async (e) => {
+      const areaCode = e.target.value;
+      const areaName = e.target.options[e.target.selectedIndex].text;
+
+      if (!areaCode) {
+        tourGrid.classList.add("hidden");
+        statusInfo.textContent = "";
+        return;
+      }
+
+      await fetchAndRenderTourData(areaCode, areaName);
+      
+      // 선택한 지역 Firestore에 저장/업데이트
+      try {
+        await setDoc(doc(db, "userSelection", "current"), {
+          areaCode,
+          areaName,
+          updatedAt: new Date().toISOString()
+        });
+      } catch (err) {
+        console.error("지역 저장 에러:", err);
+      }
+    });
+
+    // 5. 한국관광공사 TourAPI 2.0 (KorService2/areaBasedList2) 호출 (HTTPS 필수)
+    async function fetchAndRenderTourData(areaCode, areaName) {
+      showLoading(true);
+      tourGrid.innerHTML = "";
+
+      const url = `https://apis.data.go.kr/B551011/KorService2/areaBasedList2?serviceKey=${encodeURIComponent(TOUR_API_KEY)}&numOfRows=20&pageNo=1&MobileOS=ETC&MobileApp=AppTest&_type=json&arrange=A&areaCode=${areaCode}`;
+
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        let items = data.response?.body?.items?.item || [];
+
+        if (!Array.isArray(items)) items = [items];
+
+        if (items.length === 0) {
+          statusInfo.textContent = `[${areaName}] 지역의 데이터가 없습니다.`;
           tourGrid.classList.add("hidden");
           return;
         }
@@ -128,4 +180,39 @@
           </div>
           <div class="p-4">
             <h2 class="font-bold text-slate-800 line-clamp-1">${item.title}</h2>
-            <p class="text-xs text-slate-500 mt-1 line-clamp-
+            <p class="text-xs text-slate-500 mt-1 line-clamp-2">📍 ${item.addr1 || "주소 미제공"}</p>
+          </div>
+        `;
+
+        // 찜하기/찜 취소 클릭 이벤트
+        card.querySelector(".fav-btn").addEventListener("click", async (e) => {
+          const favDocRef = doc(db, "favorites", contentId);
+          const snap = await getDoc(favDocRef);
+
+          if (snap.exists()) {
+            await deleteDoc(favDocRef); // 찜 취소
+            e.target.textContent = "🤍";
+          } else {
+            await setDoc(favDocRef, { // 찜하기 저장
+              contentid: item.contentid,
+              title: item.title,
+              addr1: item.addr1 || "",
+              firstimage: item.firstimage || "",
+              savedAt: new Date().toISOString()
+            });
+            e.target.textContent = "❤️";
+          }
+        });
+
+        tourGrid.appendChild(card);
+      });
+
+      tourGrid.classList.remove("hidden");
+    }
+
+    function showLoading(bool) {
+      loading.classList.toggle("hidden", !bool);
+    }
+  </script>
+</body>
+</html>
