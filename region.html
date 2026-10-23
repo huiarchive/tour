@@ -23,7 +23,8 @@
     .loading { text-align: center; font-weight: bold; color: #2563eb; padding: 20px; }
     .hidden { display: none !important; }
     .tour-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; margin-top: 20px; }
-    .tour-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; }
+    .tour-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; transition: transform 0.2s; }
+    .tour-card:hover { transform: translateY(-4px); }
     .tour-card img { width: 100%; height: 180px; object-fit: cover; background-color: #e2e8f0; }
     .tour-card .info { padding: 15px; }
     .tour-card .title { font-size: 1.1rem; font-weight: 600; margin-bottom: 8px; color: #0f172a; }
@@ -34,7 +35,7 @@
   <div class="container">
     <header>
       <h1>🗺️ 지역별 관광정보 조회</h1>
-      <p>지역을 선택하면 관광지와 이미지를 확인하고, 선택한 지역 정보가 Firestore에 실시간 저장됩니다.</p>
+      <p>지역을 선택하면 관광지와 이미지를 확인하고, 선택한 지역 정보가 Firestore에 저장됩니다.</p>
     </header>
 
     <section class="controls">
@@ -60,20 +61,20 @@
     <main id="tourList" class="tour-grid hidden"></main>
   </div>
 
+  <!-- ⚠️ 핵심 수정: type="module" 필수 선언 -->
   <script type="module">
-    // Cloud Firestore 전용 최신 SDK (v10)
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     // -------------------------------------------------------------
-    // [인증키 및 설정 대입]
+    // [인증키 및 설정값 입력]
     // -------------------------------------------------------------
-    const TOUR_API_KEY = "b2d8f3d6a6dd0e285169d5ad17955894fbbc64c9aabbcfb3f97529b7525159b2"; // 공공데이터포털 Decoding 인증키
+    const TOUR_API_KEY = "b2d8f3d6a6dd0e285169d5ad17955894fbbc64c9aabbcfb3f97529b7525159b2"; // 공공데이터 Decoding 키
 
     const firebaseConfig = {
       apiKey: "AIzaSyBsQih3KLjaMY-giqttqHDZ0q0V3_D7cRo",
       authDomain: "my-project-ed95b.firebaseapp.com",
-      projectId: "my-project-ed95b",             // Firestore 연동 핵심 Key
+      projectId: "my-project-ed95b",
       storageBucket: "my-project-ed95b.firebasestorage.app",
       messagingSenderId: "573604898279",
       appId: "1:573604898279:web:102f4bede8bebfc7d10942"
@@ -88,7 +89,7 @@
     const loading = document.getElementById("loading");
     const statusInfo = document.getElementById("statusInfo");
 
-    // 1. 처음 로딩 시 Firestore에 저장된 선택 정보 확인
+    // 1. 처음 페이지 로딩 시 Firestore에 저장된 지역 정보 조회
     window.addEventListener("DOMContentLoaded", async () => {
       try {
         const docRef = doc(db, "userSelection", "current");
@@ -100,7 +101,7 @@
 
           if (areaCode) {
             areaSelect.value = areaCode;
-            statusInfo.textContent = `이전에 선택했던 [${areaName}] 데이터를 Firestore에서 불러왔습니다.`;
+            statusInfo.textContent = `Firestore에 저장된 기존 선택 지역 [${areaName}] 정보를 로드했습니다.`;
             await fetchAndRenderTourData(areaCode, areaName);
           }
         } else {
@@ -108,8 +109,9 @@
           statusInfo.textContent = "저장된 지역 정보가 없습니다. 지역을 선택해주세요.";
         }
       } catch (error) {
-        console.error("Firestore 읽기 오류:", error);
+        console.error("Firestore 초기 읽기 오류:", error);
         tourList.classList.add("hidden");
+        statusInfo.textContent = "지역을 선택해주세요.";
       }
     });
 
@@ -124,10 +126,7 @@
         return;
       }
 
-      // API 호출
       await fetchAndRenderTourData(areaCode, areaName);
-
-      // Firestore 저장/업데이트
       await saveSelectionToFirestore(areaCode, areaName);
     });
 
@@ -151,18 +150,18 @@
           return;
         }
 
-        statusInfo.textContent = `현재 지역: ${areaName}`;
+        statusInfo.textContent = `현재 지역: ${areaName} (총 ${items.length}건 표출)`;
         renderTourCards(items);
       } catch (error) {
         console.error("API 호출 오류:", error);
-        statusInfo.textContent = "관광 정보를 불러오는 중 오류가 발생했습니다.";
+        statusInfo.textContent = "관광 정보를 불러오는 중 오류가 발생했습니다. (인증키 및 네트워크 확인)";
         tourList.classList.add("hidden");
       } finally {
         showLoading(false);
       }
     }
 
-    // 4. 카드 시각화 목록
+    // 4. 시각화 목록 뷰
     function renderTourCards(items) {
       tourList.innerHTML = "";
       items.forEach((item) => {
@@ -186,16 +185,15 @@
       tourList.classList.remove("hidden");
     }
 
-    // 5. Firestore에 저장하는 함수
+    // 5. Firestore 데이터 저장/업데이트
     async function saveSelectionToFirestore(areaCode, areaName) {
       try {
-        // 'userSelection' 컬렉션의 'current' 문서 생성/덮어쓰기
         await setDoc(doc(db, "userSelection", "current"), {
           areaCode: areaCode,
           areaName: areaName,
           updatedAt: new Date().toISOString()
         });
-        console.log("Firestore 저장 성공! 저장된 지역:", areaName);
+        console.log("Firestore 저장 완료:", areaName);
       } catch (error) {
         console.error("Firestore 저장 실패:", error);
       }
