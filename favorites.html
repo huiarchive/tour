@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>내가 찜한 관광지 보관함</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800">
+  <div class="max-w-6xl mx-auto px-4 py-8">
+    <header class="flex justify-between items-center mb-8 border-b pb-4">
+      <h1 class="text-2xl font-extrabold text-slate-900">❤️ 내가 찜한 관광지 보관함</h1>
+      <a href="index.html" class="bg-slate-600 hover:bg-slate-700 text-white font-semibold px-4 py-2 rounded-lg shadow transition">
+        ⬅️ 메인으로 돌아가기
+      </a>
+    </header>
+
+    <main id="favGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"></main>
+    <div id="emptyMsg" class="hidden text-center py-16 text-slate-400 font-medium">찜한 관광지가 없습니다.</div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getFirestore, collection, getDocs, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBsQih3KLjaMY-giqttqHDZ0q0V3_D7cRo",
+      authDomain: "my-project-ed95b.firebaseapp.com",
+      projectId: "my-project-ed95b",
+      storageBucket: "my-project-ed95b.firebasestorage.app",
+      messagingSenderId: "573604898279",
+      appId: "1:573604898279:web:102f4bede8bebfc7d10942"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const favGrid = document.getElementById("favGrid");
+    const emptyMsg = document.getElementById("emptyMsg");
+
+    async function loadFavorites() {
+      favGrid.innerHTML = "";
+      const querySnapshot = await getDocs(collection(db, "favorites"));
+
+      if (querySnapshot.empty) {
+        emptyMsg.classList.remove("hidden");
+        return;
+      }
+
+      emptyMsg.classList.add("hidden");
+
+      querySnapshot.forEach((docSnap) => {
+        const item = docSnap.data();
+        let imageUrl = item.firstimage || "https://via.placeholder.com/400x260?text=No+Image";
+        if (imageUrl.startsWith("http://")) imageUrl = imageUrl.replace("http://", "https://");
+
+        const card = document.createElement("article");
+        card.className = "bg-white rounded-xl shadow border border-slate-100 overflow-hidden flex flex-col justify-between";
+        card.innerHTML = `
+          <div class="relative aspect-video bg-slate-200">
+            <img src="${imageUrl}" alt="${item.title}" class="w-full h-44 object-cover" />
+            <button class="remove-btn absolute top-2 right-2 bg-white/80 p-2 rounded-full shadow text-sm hover:scale-110 transition">
+              🗑️ 삭제
+            </button>
+          </div>
+          <div class="p-4">
+            <h2 class="font-bold text-slate-800 line-clamp-1">${item.title}</h2>
+            <p class="text-xs text-slate-500 mt-1 line-clamp-2">📍 ${item.addr1 || "주소 미제공"}</p>
+          </div>
+        `;
+
+        // 찜 취소(보관함에서 삭제)
+        card.querySelector(".remove-btn").addEventListener("click", async () => {
+          await deleteDoc(doc(db, "favorites", String(item.contentid)));
+          loadFavorites();
+        });
+
+        favGrid.appendChild(card);
+      });
+    }
+
+    window.addEventListener("DOMContentLoaded", loadFavorites);
+  </script>
+</body>
+</html>
